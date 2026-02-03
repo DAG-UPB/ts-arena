@@ -93,6 +93,11 @@ Create/edit the `.env` file in the project root:
 API_BASE_URL=https://your-api-portal-url.com
 API_UPLOAD_KEY=your-api-key-here
 
+USER_ID=your-user-id-here
+
+# This is the local service that routes predictions to your model containers
+MASTER_CONTROLLER_URL=http://master-controller-api:8000
+
 # Local settings (usually no changes needed)
 CHECK_INTERVAL=60
 REQUEST_TIMEOUT=600
