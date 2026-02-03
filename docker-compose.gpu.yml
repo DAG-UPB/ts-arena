@@ -1,0 +1,14 @@
+# Overlay for Linux hosts with NVIDIA GPUs. Requires nvidia-container-toolkit.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+services:
+  master-controller-api:
+    environment:
+      - GPU_ENABLED=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+

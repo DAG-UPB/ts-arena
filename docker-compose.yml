@@ -1,0 +1,60 @@
+services:
+  master-controller-api:
+    build: ./master-controller
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8456:8000"
+    environment:
+      - DOCKER_HOST=http://docker-proxy:2375
+      - TARGET_LABEL=managed.by=controller
+    env_file:
+      - .env
+    networks:
+      - internal
+    depends_on:
+      - docker-proxy
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      - CONTAINERS=1
+      - ALLOW_START=1
+      - ALLOW_STOP=1
+      - ALLOW_RESTARTS=1
+      - IMAGES=0
+      - NETWORKS=0
+      - VOLUMES=0
+      - POST=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+
+  challenge-uploads:
+    build: ./challenge-uploads
+    environment:
+      - API_BASE_URL=${API_BASE_URL:-http://api-portal:8000}
+      - MASTER_CONTROLLER_URL=http://master-controller-api:8000
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-600}
+      - API_UPLOAD_KEY=${API_UPLOAD_KEY}
+      - USER_ID=${USER_ID}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    networks:
+      - internal
+    depends_on:
+      - master-controller-api
+      - docker-proxy
+
+include:
+  - compose/example_naive.yml
+
+volumes:
+  arena-db:
+
+networks:
+  default:
+  internal:
+    driver: bridge

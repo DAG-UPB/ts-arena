@@ -1,0 +1,16 @@
+{
+    "naive-forecast": {
+        "name": "Statistical/Naive",
+        "model_type": "Baseline",
+        "model_family": "Statistical",
+        "model_size": 0,
+        "hosting": "UPB",
+        "architecture": "rule-based",
+        "pretraining_data": null,
+        "publishing_date": null,
+        "parameters": {
+            "additionalProp1": {}
+        },
+        "organization_id": null
+    }
+}
