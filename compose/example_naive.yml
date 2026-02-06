@@ -1,0 +1,21 @@
+services:
+  naive-forecast:
+    extends:
+      file: base.yml
+      service: cpu-model-base  # Use CPU base (no GPU needed for naive model)
+    container_name: naive-forecast
+    image: naive-forecast
+    build:
+      context: ../model-services/example_naive
+      dockerfile: Dockerfile
+    ports:
+      - "8457:8000"
+    environment:
+      - NAIVE_STRATEGY=last  # Options: last, mean, median, first
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  arena-db:

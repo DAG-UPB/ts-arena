@@ -1,0 +1,9 @@
+# Overlay for macOS hosts (Apple Silicon or Intel). Forces amd64 for CUDA-based images when needed.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d
+services:
+  # timesfm uses a CUDA base image which isn't available for darwin; force linux/amd64 emulation if on Apple Silicon.
+  timesfm:
+    platform: linux/amd64
+
+  # If other services require a specific platform, set them here similarly.
+  # chronos-bolt/moirai-moe/time-moe/moment currently use python:3.12-slim and should work natively.

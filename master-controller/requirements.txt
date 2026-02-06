@@ -1,0 +1,9 @@
+httpx
+docker
+pandas
+pydantic
+fastapi
+uvicorn
+requests
+asyncpg
+psycopg2-binary
