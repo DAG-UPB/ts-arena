@@ -85,7 +85,7 @@ Create/edit the `.env` file in the project root:
 
 ```bash
 # TS-Arena API Connection
-API_BASE_URL=https://your-api-portal-url.com
+API_BASE_URL=http://your-api-portal-url
 API_UPLOAD_KEY=your-api-key-here
 
 USER_ID=your-user-id-here
@@ -94,7 +94,7 @@ USER_ID=your-user-id-here
 MASTER_CONTROLLER_URL=http://master-controller-api:8000
 
 # Local settings (usually no changes needed)
-CHECK_INTERVAL=60
+CHECK_INTERVAL=300
 REQUEST_TIMEOUT=600
 LOG_LEVEL=INFO
 ```
