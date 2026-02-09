@@ -186,7 +186,7 @@ The service remembers already processed challenges (in memory) and skips them on
 
 ```
 2026-02-03 14:52:19 [INFO] Challenge Upload Service started
-2026-02-03 14:52:19 [INFO] API Base URL: http://your-api-url:8458/
+2026-02-03 14:52:19 [INFO] API Base URL: http://your-api-url
 2026-02-03 14:52:19 [INFO] Master Controller URL: http://master-controller-api:8000
 2026-02-03 14:52:19 [INFO] Check Interval: 60s
 2026-02-03 14:52:19 [INFO] Model matched: Container 'naive-forecast' -> API Name 'Statistical/Naive'
