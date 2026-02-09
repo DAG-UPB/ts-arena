@@ -8,12 +8,10 @@ To address these challenges, we introduce **TS-Arena**, a platform for live-data
 
 The core of our methodology is the pre-registration of forecasts. This mechanism requires that a prediction is irrevocably committed at a specific time point  before the ground truth observations manifest. By enforcing this strictly causal timeline, we mitigate two primary forms of information leakage:
 
-* 
-**Test Set Contamination**: This occurs when benchmark data is exposed to a model during its pre-training phase. Since our platform uses real-time future data, the target values cannot be part of any training corpus.
+* **Test Set Contamination**: This occurs when benchmark data is exposed to a model during its pre-training phase. Since our platform uses real-time future data, the target values cannot be part of any training corpus.
 
 
-* 
-**Global Pattern Memorization**: Models can exploit shared global shocks, such as economic crises, that influence many series simultaneously. A global time-split at  ensures models rely on learned dynamics rather than recognizing events they have already seen in other series during training.
+* **Global Pattern Memorization**: Models can exploit shared global shocks, such as economic crises, that influence many series simultaneously. A global time-split at  ensures models rely on learned dynamics rather than recognizing events they have already seen in other series during training.
 
 
 
@@ -35,8 +33,7 @@ The [Backend Infrastructure](https://github.com/DAG-UPB/ts-arena-backend) powers
 * **Data Portal**: Responsible for fetching ground truth data from external providers like the U.S. Energy Information Administration (EIA) and **SMARD** (Bundesnetzagentur).
 
 
-* 
-**API Portal**: Handles model registration, accepts incoming forecasts, and manages the evaluation process.
+* **API Portal**: Handles model registration, accepts incoming forecasts, and manages the evaluation process.
 
 
 * **Dashboard API**: Serves the frontend by retrieving statistics and leaderboard data.
@@ -45,12 +42,10 @@ The [Backend Infrastructure](https://github.com/DAG-UPB/ts-arena-backend) powers
 
 The [Models Repository](https://github.com/DAG-UPB/ts-arena-models) contains the implementation of various state-of-the-art forecasting models. These models serve as baseline participants in the challenges:
 
-* 
-**Foundation Models**: Includes Chronos, TimesFM, Moirai, MOMENT, and Time-MoE.
+* **Foundation Models**: Includes Chronos, TimesFM, Moirai, MOMENT, and Time-MoE.
 
 
-* 
-**Standard Baselines**: Includes statistical methods and deep learning models like NHITS or PatchTST.
+* **Standard Baselines**: Includes statistical methods and deep learning models like NHITS or PatchTST.
 The repository provides a containerized environment to ensure context parity and full reproducibility across all implemented models.
 
 
