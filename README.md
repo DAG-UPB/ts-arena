@@ -82,7 +82,7 @@ This repository provides everything you need to participate in TS-Arena challeng
 
 ### Step 1: Configure Credentials
 
-Create/edit the `.env` file in the project root:
+Create/edit the `.env` file in the `ts-arena-participation_example/` directory:
 
 ```bash
 # TS-Arena API Connection
@@ -103,7 +103,7 @@ LOG_LEVEL=INFO
 ### Step 2: Register Your Model
 
 ```bash
-cd challenge-uploads/src
+cd ts-arena-participation_example/challenge-uploads/src
 python register_models.py --check   # Test API connection
 python register_models.py           # Register models from config.json
 ```
@@ -111,6 +111,7 @@ python register_models.py           # Register models from config.json
 ### Step 3: Start the System
 
 ```bash
+cd ts-arena-participation_example
 docker compose up -d
 ```
 
@@ -123,6 +124,7 @@ That's it! The system will now:
 ### View Logs
 
 ```bash
+cd ts-arena-participation_example
 docker compose logs -f challenge-uploads   # See challenge processing
 docker compose logs -f naive-forecast      # See model predictions
 ```
@@ -136,7 +138,7 @@ The naive forecast model serves as a template. To add your own model:
 ### 1. Create Your Model Directory
 
 ```
-model-services/
+ts-arena-participation_example/model-services/
 └── your_model/
     ├── Dockerfile
     ├── requirements.txt
@@ -187,7 +189,7 @@ class YourModel:
 
 ### 3. Create Compose File
 
-Create `compose/your_model.yml`:
+Create `ts-arena-participation_example/compose/your_model.yml`:
 
 ```yaml
 services:
@@ -205,7 +207,7 @@ services:
       - YOUR_MODEL_PARAM=value
 ```
 
-### 4. Add to docker-compose.yml
+### 4. Add to ts-arena-participation_example/docker-compose.yml
 
 ```yaml
 include:
@@ -215,7 +217,7 @@ include:
 
 ### 5. Register in config.json
 
-Add your model to `challenge-uploads/src/config.json`:
+Add your model to `ts-arena-participation_example/challenge-uploads/src/config.json`:
 
 ```json
 {
@@ -237,11 +239,12 @@ Add your model to `challenge-uploads/src/config.json`:
 
 ```bash
 # Register your new model with the API
-cd challenge-uploads/src
+cd ts-arena-participation_example/challenge-uploads/src
 python register_models.py
 
 # Start all services
-cd ../..
+cd ../../..
+cd ts-arena-participation_example
 docker compose up -d --build
 ```
 

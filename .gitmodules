@@ -1,0 +1,9 @@
+[submodule "ts-arena-models"]
+	path = ts-arena-models
+	url = git@git.uni-paderborn.de:ts-arena/ts-arena-models.git
+[submodule "ts-arena-frontend"]
+	path = ts-arena-frontend
+	url = git@git.uni-paderborn.de:ts-arena/ts-arena-frontend.git
+[submodule "ts-arena-backend"]
+	path = ts-arena-backend
+	url = git@git.uni-paderborn.de:ts-arena/ts-arena-backend.git
