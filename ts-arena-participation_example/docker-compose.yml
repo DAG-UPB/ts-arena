@@ -37,7 +37,6 @@ services:
       - MASTER_CONTROLLER_URL=http://master-controller-api:8000
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-600}
       - API_UPLOAD_KEY=${API_UPLOAD_KEY}
-      - USER_ID=${USER_ID}
       - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     env_file:

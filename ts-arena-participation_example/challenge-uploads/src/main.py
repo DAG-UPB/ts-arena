@@ -27,7 +27,6 @@ MASTER_CONTROLLER_URL = os.environ.get("MASTER_CONTROLLER_URL", "http://localhos
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "600"))
 API_KEY = os.environ.get("API_UPLOAD_KEY", "default_api_key")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "60"))
-USER_ID = os.environ.get("USER_ID")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", "config.json")
 PARTICIPATION_LOG_FILE = os.environ.get("PARTICIPATION_LOG_FILE", "participation_log.csv")
 
@@ -126,19 +125,13 @@ def load_config() -> Dict[str, Any]:
 
 
 def fetch_registered_models() -> List[Dict[str, Any]]:
-    """Fetch registered models from API"""
-    if not USER_ID:
-        logger.warning("USER_ID not set, cannot fetch models")
-        return []
-    
+    """Fetch registered models from API (returns only models owned by the API key's user)"""
     try:
-        # Set user_id parameter
-        params = {"user_id": USER_ID}
         url = f"{API_BASE_URL}/api/v1/models"
         headers = {"X-API-Key": API_KEY}
-        logger.debug(f"GET {url} params={params}")
-        
-        resp = requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT)
+        logger.debug(f"GET {url}")
+
+        resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
