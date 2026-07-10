@@ -1,0 +1,31 @@
+name: Update Submodules
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout parent repo
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: true
+
+    - name: Update submodules
+      run: |
+        git submodule update --init --recursive --remote --merge
+
+    - name: Commit and push if changed
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        git diff --quiet && git diff --staged --quiet || (
+          git commit -am "chore: update submodules to latest commits"
+          git push
+        )
