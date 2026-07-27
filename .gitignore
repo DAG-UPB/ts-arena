@@ -3,3 +3,6 @@
 .venv/
 __pycache__/
 ts-models-backtesting
+.DS_Store
+ts-arena-console/
+ts-arena-console-frontend/
