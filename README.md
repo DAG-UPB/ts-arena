@@ -2,6 +2,7 @@
 
 <div align="center">
 
+[![KDD 2026](https://img.shields.io/badge/KDD_2026-Datasets_%26_Benchmarks-0085CA?logo=acm&logoColor=white)](https://doi.org/10.1145/3770855.3817515)
 [![Paper](https://img.shields.io/badge/arXiv-2512.20761-b31b1b?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2512.20761)
 [![ICLR TSALM Workshop](https://img.shields.io/badge/ICLR_TSALM_Workshop-OpenReview-blue?logo=openreview&logoColor=white)](https://openreview.net/forum?id=TcKLyWrfZT)
 [![Live Arena](https://img.shields.io/badge/TS--Arena-Live_Leaderboard-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01ek0yIDEybDEwIDUgMTAtNS0xMC01eiIvPjwvc3ZnPg==)](https://ts-arena.live/)
@@ -252,13 +253,21 @@ docker compose up -d --build
 
 ## Citation 📖
 
-If you use TS-Arena in your research, please cite our paper:
+TS-Arena was published at **KDD '26** (Datasets & Benchmarks Track). If you use TS-Arena
+in your research, please cite:
 
 ```bibtex
-@article{meyer2025tsarena,
-  title     = {TS-Arena: A Live Forecast Pre-Registration Platform},
+@inproceedings{meyer2026tsarena,
+  title     = {TS-Arena -- A Live Forecast Pre-Registration Platform},
   author    = {Meyer, Marcel and Kaltenpoth, Sascha and Albers, Henrik and Zalipski, Kevin and M{\"u}ller, Oliver},
-  journal   = {arXiv preprint arXiv:2512.20761},
-  year      = {2025}
+  booktitle = {Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2},
+  series    = {KDD '26},
+  pages     = {9558--9568},
+  year      = {2026},
+  publisher = {Association for Computing Machinery},
+  doi       = {10.1145/3770855.3817515},
+  url       = {https://doi.org/10.1145/3770855.3817515}
 }
 ```
+
+The preprint remains available at [arXiv:2512.20761](https://arxiv.org/abs/2512.20761).
