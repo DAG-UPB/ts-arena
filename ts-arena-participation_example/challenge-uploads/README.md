@@ -68,8 +68,12 @@ The service performs the following steps:
 2. **Challenge Polling**: Regularly polls active challenge rounds via `GET /api/v1/challenge/rounds?status=registration`
 3. **Context Data**: Loads historical data via `GET /api/v1/challenge/rounds/{round_id}/context-data` with API key
 4. **Prediction**: Sends batch history data to the Master Controller (`POST http://master-controller-api:8000/predict`) for each configured model
-5. **Formatting**: Formats predictions according to API specification with correct timestamps based on frequency
-6. **Upload**: Uploads forecasts via `POST /api/v1/forecasts/upload` with `round_id` and `model_name`
+5. **Formatting**: Generates the forecast timestamps itself, per series, from that series' own
+   last context point (`last context ts + k * frequency`). The model service's own timestamps
+   are discarded — see "Forecast Upload Format" below for why.
+6. **Upload**: Uploads forecasts via `POST /api/v1/forecasts/upload` with `round_id` and
+   `model_name`, then **reads the response** and verifies the platform stored everything it
+   sent. A partial upload is logged as a failure, not a success.
 
 **Note**: Uploading forecasts automatically registers your model as a challenge participant. No separate registration step needed per challenge!
 
@@ -125,8 +129,10 @@ When uploading forecasts, use this payload format:
     {
       "challenge_series_name": "Energy_Series_1",
       "forecasts": [
-        {"ts": "2026-02-02T10:15:00Z", "value": 150.5},
-        {"ts": "2026-02-02T10:30:00Z", "value": 152.3}
+        {"ts": "2026-02-02T10:15:00Z", "value": 150.5,
+         "probabilistic_values": {"q_0.1": 141.0, "q_0.5": 150.5, "q_0.9": 160.2}},
+        {"ts": "2026-02-02T10:30:00Z", "value": 152.3,
+         "probabilistic_values": {"q_0.1": 142.1, "q_0.5": 152.3, "q_0.9": 162.7}}
       ]
     }
   ]
@@ -138,6 +144,41 @@ When uploading forecasts, use this payload format:
 - `challenge_series_name`: From the context data response
 - `ts`: ISO 8601 timestamp
 - `value`: Predicted value
+- `probabilistic_values`: Optional quantiles, canonical keys `q_0.1` … `q_0.9` (all nine in a
+  real submission; abbreviated here). Non-canonical keys are silently dropped.
+
+There is no `user_id` field — your identity comes from the `X-API-Key` header.
+
+### Timestamps are per series
+
+Each series is anchored on **its own** last context point:
+
+```
+first forecast ts = (that series' last context ts) + frequency
+```
+
+not on the round's `start_time`, which is informative only and anchors nothing. The upstream
+sources are live but not real-time to the second, so each series' context can end a step or
+two short of the round-wide value. It usually does not, which is what makes a round-wide
+anchor look correct in testing — but where it does, that series is submitted on timestamps
+that do not exist for it and the platform rejects it. This client therefore generates the timestamps itself and overwrites whatever
+the model service returned — it does not rely on the context arriving in timestamp order.
+
+### A 201 does not mean everything was stored
+
+The API accepts partial uploads: one rejected series out of sixteen still returns HTTP 201
+with `success: true`. This client compares the returned `points_inserted` against what it
+sent and raises `UploadRejected` on any shortfall, so a partial upload shows up as a
+`FAILURE` row in `participation_log.csv` rather than a tick in the log.
+
+## Tests
+
+```bash
+pytest challenge-uploads/tests/
+```
+
+Covers the timestamp anchoring, the frequency handling and the upload-response checking.
+Run them after changing anything under `challenge-uploads/src/` or `model-services/`.
 
 ## Build & Run
 
@@ -198,6 +239,6 @@ The service remembers already processed challenges (in memory) and skips them on
 2026-02-03 14:52:19 [INFO]   Horizon: P1D -> 96 steps
 2026-02-03 14:52:20 [INFO]   15 series found
 2026-02-03 14:52:20 [INFO]   Creating predictions with container naive-forecast for model Statistical/Naive
-2026-02-03 14:52:22 [INFO] ✓ Upload successful for round 12098, model Statistical/Naive: 15 series
+2026-02-03 14:52:22 [INFO] ✓ Upload verified for round 12098, model Statistical/Naive: 1440/1440 points, 1440 with quantiles, model_id=12
 2026-02-03 14:52:25 [INFO] Waiting 60s for next check...
 ```

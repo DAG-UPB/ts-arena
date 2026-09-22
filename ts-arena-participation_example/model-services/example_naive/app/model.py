@@ -26,22 +26,30 @@ class NaiveForecastModel:
         point_forecast: float, 
         quantile_levels: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     ) -> Dict[str, float]:
-        """Compute naive quantile forecasts based on historical variance."""
+        """Compute naive quantile forecasts from the spread of the series' own changes.
+
+        Keys are the platform's canonical form, `q_0.1` ... `q_0.9`. The API also accepts
+        bare `"0.1"` keys and canonicalises them, but anything outside those two forms —
+        `"0.10"`, `"p10"`, `"q10"` — is silently DROPPED from your submission. Emit the
+        canonical form and there is nothing to get wrong.
+
+        Deterministic: the band comes from the empirical quantiles of the series' first
+        differences. The previous version drew `np.random.standard_normal(10000)` per call
+        and took `abs()` of a percentile of it, so identical input produced a different
+        band every run and the result was an awkward restatement of `norm.ppf`.
+        """
+        levels = list(quantile_levels)
         if len(series) < 2:
-            return {str(q): point_forecast for q in quantile_levels}
-        
-        std = float(np.std(series))
-        
+            # No observed variation to draw a band from. A flat band is still valid,
+            # monotone and non-crossing; it just claims no uncertainty.
+            return {f"q_{q}": point_forecast for q in levels}
+
+        diffs = np.diff(np.asarray(series, dtype=float))
+
         quantiles = {}
-        for q in quantile_levels:
-            z_score = float(np.abs(np.percentile(np.random.standard_normal(10000), q * 100)))
-            if q < 0.5:
-                quantiles[str(q)] = point_forecast - z_score * std
-            elif q > 0.5:
-                quantiles[str(q)] = point_forecast + z_score * std
-            else:
-                quantiles[str(q)] = point_forecast
-        
+        for q in levels:
+            quantiles[f"q_{q}"] = point_forecast + float(np.quantile(diffs, q))
+
         return quantiles
 
     def predict(
