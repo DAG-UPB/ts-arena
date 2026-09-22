@@ -211,8 +211,14 @@ def parse_frequency(frequency_str: str) -> timedelta:
         if match:
             return converter(match)
     
-    logger.warning(f"Could not parse frequency '{frequency_str}', using 1 hour as default")
-    return timedelta(hours=1)
+    # No hourly fallback (ts-arena #20). A frequency this client cannot parse means a
+    # challenge cadence it was never taught; guessing hourly produced correctly-counted
+    # points at wrong spacing, which the platform accepted and scored. Failing here costs
+    # one round and says exactly what is wrong.
+    raise ValueError(
+        f"Unsupported challenge frequency '{frequency_str}'. Add it to parse_frequency() "
+        f"rather than letting the client guess the spacing of your forecast."
+    )
 
 
 def parse_horizon(horizon_str: str, frequency) -> int:
@@ -231,6 +237,11 @@ def parse_horizon(horizon_str: str, frequency) -> int:
     except Exception as e:
         logger.warning(f"Error parsing horizon string '{horizon_str}': {e}")
         return 1  # Default to 1 step
+
+
+def parse_timestamp(ts_str: str) -> datetime:
+    """Parse an ISO-8601 timestamp from the API into an aware datetime."""
+    return datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
 
 
 # --- Context Utils ---
@@ -256,11 +267,12 @@ def extract_history_from_context(context_data: List[Dict[str, Any]]) -> Tuple[Li
         
         # Extract as HistoryItem format (ts + value dicts)
         history_items = [{"ts": item['ts'], "value": item['value']} for item in data]
-        
-        # Find maximum timestamp
-        timestamps = [item['ts'] for item in data]
-        max_ts_str = max(timestamps)
-        max_dt = datetime.fromisoformat(max_ts_str.replace('Z', '+00:00'))
+
+        # Find the last context timestamp. Parse BEFORE comparing: max() over raw ISO
+        # strings is a lexicographic comparison, which only happens to be right while
+        # every timestamp shares one format and offset. Mixed 'Z' / '+00:00', or differing
+        # microsecond precision, silently picks the wrong anchor (ts-arena #20).
+        max_dt = max(parse_timestamp(item['ts']) for item in data)
         
         histories.append(history_items)
         series_names.append(name)
@@ -312,14 +324,42 @@ def predict_with_model(model_name: str, histories: List[List[Dict[str, Any]]], h
 
 
 # --- Forecast Formatting ---
+def expected_forecast_timestamps(
+    context_edge: datetime,
+    frequency_delta: timedelta,
+    horizon_steps: int,
+) -> List[str]:
+    """The timestamps a forecast for this series must carry.
+
+    `context_edge + k * frequency` for k = 1..horizon_steps — the same rule the platform
+    validates against. Derived per series, because series lag: the round's global start
+    time sits one or more steps after a lagging series' own last context point.
+    """
+    return [
+        (context_edge + k * frequency_delta).isoformat()
+        for k in range(1, horizon_steps + 1)
+    ]
+
+
 def format_forecasts(
     prediction: Union[List[Dict], List[List[Dict]], List[List[float]]], 
     series_names: List[str], 
     max_timestamps: List[datetime],
-    frequency_delta: timedelta
+    frequency_delta: timedelta,
+    horizon_steps: int,
 ) -> List[Dict[str, Any]]:
     """
-    Format predictions into upload format
+    Format predictions into upload format.
+
+    The timestamps are generated HERE, from the per-series context edge this client already
+    computed, and they overwrite whatever the model service returned (ts-arena #20).
+
+    Previously this function took `max_timestamps` and `frequency_delta` and used neither:
+    the timestamps that reached the API were the model service's, anchored on
+    `series[-1].ts` — the last element in *array order*. That was correct only for as long
+    as the API happened to return context points sorted by ts. Nothing in the API contract
+    promised that, so a reordering upstream would have shifted every forecast from every
+    copy of this client at once, silently and without an error.
     """
     forecasts_array = []
     
@@ -329,35 +369,116 @@ def format_forecasts(
         
         if isinstance(first_item, dict) and 'ts' in first_item:
             # Single series
+            series_forecasts = _retimestamp(
+                prediction, max_timestamps[0], frequency_delta, horizon_steps,
+                series_names[0],
+            )
             forecasts_array.append({
                 "challenge_series_name": series_names[0],
-                "forecasts": prediction
+                "forecasts": series_forecasts
              })
         elif isinstance(first_item, list) and len(first_item) > 0 and isinstance(first_item[0], dict) and 'ts' in first_item[0]:
             # Multiple series
-            for i, (name, series_forecasts) in enumerate(zip(series_names, prediction)):
+            for name, context_edge, series_forecasts in zip(series_names, max_timestamps, prediction):
                 forecasts_array.append({
                     "challenge_series_name": name,
-                    "forecasts": series_forecasts
+                    "forecasts": _retimestamp(
+                        series_forecasts, context_edge, frequency_delta, horizon_steps, name,
+                    )
                 })
     return forecasts_array
 
 
+def _retimestamp(
+    series_forecasts: List[Dict[str, Any]],
+    context_edge: datetime,
+    frequency_delta: timedelta,
+    horizon_steps: int,
+    series_name: str,
+) -> List[Dict[str, Any]]:
+    """Replace the model service's timestamps with the ones the round actually expects."""
+    expected = expected_forecast_timestamps(context_edge, frequency_delta, horizon_steps)
+
+    if len(series_forecasts) != len(expected):
+        raise ValueError(
+            f"Series '{series_name}': model returned {len(series_forecasts)} points but the "
+            f"round expects {len(expected)}. Refusing to upload a payload the platform "
+            f"would reject."
+        )
+
+    return [
+        {**point, "ts": ts}
+        for point, ts in zip(series_forecasts, expected)
+    ]
+
+
 # --- Upload ---
-def upload_forecasts(round_id: int, model_name: str, forecasts: List[Dict[str, Any]]):
-    """Upload forecasts for a challenge round"""
+class UploadRejected(Exception):
+    """The API accepted the request but rejected some or all of the forecast."""
+
+
+def upload_forecasts(
+    round_id: int, model_name: str, forecasts: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Upload forecasts for a challenge round, and check what the platform actually stored.
+
+    A partially-accepted upload comes back as **HTTP 201**: the API sets `success` to
+    "anything landed at all", and reports per-series rejections in `errors`. So
+    `raise_for_status()` is not enough — this function used to stop there and log a tick
+    based on how many series it *sent*, which meant an upload could be almost entirely
+    rejected while the log read `✓ Upload successful` (ts-arena #21).
+
+    Returns the parsed response so the caller can log the platform's own numbers.
+    Raises UploadRejected if anything was refused.
+    """
     payload = {
         "round_id": round_id,
         "model_name": model_name,
         "forecasts": forecasts
     }
-    
+    expected_points = sum(len(series["forecasts"]) for series in forecasts)
+
     try:
-        http_post("/api/v1/forecasts/upload", json_data=payload)
-        logger.info(f"✓ Upload successful for round {round_id}, model {model_name}: {len(forecasts)} series")
+        resp = http_post("/api/v1/forecasts/upload", json_data=payload)
     except Exception as e:
         logger.error(f"✗ Error uploading for round {round_id}, model {model_name}: {e}")
         raise
+
+    try:
+        body = resp.json() or {}
+    except ValueError:
+        logger.warning("Upload response was not JSON; cannot verify what was stored")
+        return {}
+
+    # `warnings` and the point/probabilistic split arrive from newer api-portal versions
+    # only. Read everything defensively so this client keeps working against both.
+    errors = body.get("errors") or []
+    warnings = body.get("warnings") or []
+    rejections = [e for e in errors if e not in warnings]
+
+    inserted = body.get("points_inserted", body.get("forecasts_inserted", 0))
+    probabilistic = body.get("probabilistic_points_inserted")
+    model_id = body.get("model_id")
+
+    stored = f"{inserted}/{expected_points} points"
+    if probabilistic is not None:
+        stored += f", {probabilistic} with quantiles"
+    if model_id is not None:
+        stored += f", model_id={model_id}"
+
+    for warning in warnings:
+        logger.warning(f"  upload warning: {warning}")
+
+    if rejections or inserted < expected_points:
+        for rejection in rejections:
+            logger.error(f"  upload rejected: {rejection}")
+        raise UploadRejected(
+            f"round {round_id}, model {model_name}: stored {stored}"
+            + (f"; {len(rejections)} rejection(s): {rejections}" if rejections else "")
+        )
+
+    logger.info(f"✓ Upload verified for round {round_id}, model {model_name}: {stored}")
+    return body
 
 
 # --- Main ---
@@ -413,15 +534,18 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
         # Generic ISO duration mapping
         if frequency_str.startswith('PT'):
             if 'H' in frequency_str: model_freq = 'h'
-            elif 'M' in frequency_str: model_freq = '15min' # default min
+            # No 'any PT..M means 15min' guess: PT5M and PT15M are different challenges,
+            # and the wrong one silently mis-spaces every point (ts-arena #20).
         elif frequency_str.startswith('P'):
             if 'D' in frequency_str: model_freq = 'D'
             elif 'W' in frequency_str: model_freq = 'W'
             elif 'M' in frequency_str: model_freq = 'M'
         
         if not model_freq:
-            logger.warning(f"Could not map frequency '{frequency_str}' to model format, using 'h'")
-            model_freq = 'h'
+            raise ValueError(
+                f"Could not map challenge frequency '{frequency_str}' to a model frequency "
+                f"string. Add it to freq_mapping rather than defaulting to hourly."
+            )
     
     # Process for each model in active_models
     for container_name, api_model_name in active_models:
@@ -436,11 +560,19 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
                 continue
             
             # Format forecasts
-            forecasts = format_forecasts(predictions, series_names, max_timestamps, frequency_delta)
+            forecasts = format_forecasts(
+                predictions, series_names, max_timestamps, frequency_delta, horizon_steps,
+            )
             
             # Upload uses api_model_name (e.g., 'Statistical/Naive')
-            upload_forecasts(int(round_id), api_model_name, forecasts)
-            log_participation(str(round_id), challenge_name, container_name, api_model_name, "SUCCESS", f"Uploaded {len(forecasts)} series")
+            result = upload_forecasts(int(round_id), api_model_name, forecasts)
+            # Report what the PLATFORM stored, never what we sent.
+            log_participation(
+                str(round_id), challenge_name, container_name, api_model_name, "SUCCESS",
+                f"Stored {result.get('points_inserted', result.get('forecasts_inserted', '?'))} points "
+                f"({result.get('probabilistic_points_inserted', '?')} with quantiles) "
+                f"across {len(forecasts)} series"
+            )
             
         except Exception as e:
             error_details = traceback.format_exc()
