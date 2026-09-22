@@ -67,6 +67,23 @@ GET /api/v1/challenge/rounds/{round_id}/context-data
 
 Returns the historical context, grouped by anonymized `challenge_series_name`. Each group includes its `frequency` and a list of `(ts, value)` pairs.
 
+### A round can be open before its context data is ready
+
+A round appears in `GET /challenge/rounds` as soon as registration opens, which can be
+**before** its context data is published. An empty response here is normal and temporary —
+it does not mean the round is closed or that you are not eligible.
+
+If your client polls, make sure it distinguishes *"I submitted"* from *"there was nothing to
+submit yet"*. A poller that treats every pass over a round as final will retire the round on
+its first look, and never forecast it — the round stays open, your submission never happens,
+and nothing in your logs says so. Retry until you have uploaded, bounded by the round's
+`registration_end`.
+
+Track this **per model**, not per round. A retry after a partly successful upload must skip
+the models that already landed: a duplicate upload is ignored by the platform and comes back
+as `points_inserted: 0`, which a client that verifies its uploads will correctly read as a
+failure — and then retry forever.
+
 ---
 
 ## 4. (Optional) Grab the naive template — smoke test
