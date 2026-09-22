@@ -4,7 +4,7 @@ Run after changing anything under `challenge-uploads/src/` or `model-services/`:
 
     pytest challenge-uploads/tests/
 
-They cover the two ways a forecast can be silently wrong on the wire:
+They cover the three ways a forecast can be silently lost:
 
 * **Timestamps** (ts-arena #20) — each series must be anchored on its own last context
   point, parsed rather than string-compared, and the client must never guess a spacing it
@@ -12,6 +12,10 @@ They cover the two ways a forecast can be silently wrong on the wire:
 * **The upload response** (ts-arena #21) — a partially-rejected upload comes back as HTTP
   201 with `success: true`. The client must read the body and fail on it, rather than
   logging a tick based on what it sent.
+* **The poll loop** (ts-arena #22) — a round is settled only by a real submission. Context
+  data that is not published yet, and an upload that failed, both mean *retry*, not *done*;
+  a retry must not re-submit the models that already landed, and must stop at
+  `registration_end`.
 """
 import importlib.util
 from datetime import datetime, timedelta, timezone
@@ -208,3 +212,101 @@ def test_quantiles_do_not_cross():
 
 def test_single_point_series_degrades_to_a_flat_band():
     assert set(naive.NaiveForecastModel()._compute_quantiles([5.0], 5.0).values()) == {5.0}
+
+
+# --- a round is settled only by a real submission (ts-arena #22) -------------
+#
+# `process_challenge` used to return None on four paths, two of which mean "the round is
+# open, its context data just isn't published yet". The caller retired the round anyway,
+# so the forecast was never made and never retried.
+
+OPEN_ROUND = {
+    "id": 77, "name": "r", "frequency": "PT1H", "horizon": "PT3H",
+    "registration_end": "2099-01-01T00:00:00Z",
+}
+CLOSED_ROUND = dict(OPEN_ROUND, registration_end="2020-01-01T00:00:00Z")
+MODELS = [("container-a", "Vendor/A"), ("container-b", "Vendor/B")]
+
+
+@pytest.fixture
+def uploader(monkeypatch, tmp_path):
+    """The uploader with its I/O stubbed: no HTTP, no CSV in the repo."""
+    monkeypatch.setattr(m, "PARTICIPATION_LOG_FILE", str(tmp_path / "participation.csv"))
+    monkeypatch.setattr(m, "get_context_data", lambda rid: _ctx(
+        [{"ts": (BASE + i * FREQ).isoformat(), "value": float(i)} for i in range(4)]
+    ))
+    monkeypatch.setattr(m, "predict_with_model",
+                        lambda *a, **k: [[{"ts": "x", "value": 1.0} for _ in range(3)]])
+    return m
+
+
+def test_round_without_context_data_is_not_settled(uploader, monkeypatch):
+    """The reported bug: not-ready must mean retry, not 'done'."""
+    monkeypatch.setattr(m, "get_context_data", lambda rid: [])
+    assert m.process_challenge(OPEN_ROUND, MODELS) is False
+
+
+def test_round_without_usable_history_is_not_settled(uploader, monkeypatch):
+    monkeypatch.setattr(m, "get_context_data", lambda rid: [{"challenge_series_name": "s", "data": []}])
+    assert m.process_challenge(OPEN_ROUND, MODELS) is False
+
+
+def test_a_fully_accepted_round_is_settled(uploader, monkeypatch):
+    monkeypatch.setattr(m, "upload_forecasts", lambda *a, **k: _accepted())
+    submitted = set()
+    assert m.process_challenge(OPEN_ROUND, MODELS, submitted=submitted) is True
+    assert submitted == {"Vendor/A", "Vendor/B"}
+
+
+def test_failed_upload_leaves_the_round_open_for_retry(uploader, monkeypatch):
+    """A failed upload used to settle the round too, burning it permanently."""
+    monkeypatch.setattr(m, "upload_forecasts",
+                        lambda *a, **k: (_ for _ in ()).throw(m.UploadRejected("nope")))
+    assert m.process_challenge(OPEN_ROUND, MODELS) is False
+
+
+def test_retry_does_not_resubmit_the_models_that_already_landed(uploader, monkeypatch):
+    """Mixed outcomes: B retries, A must not upload a second time."""
+    calls = []
+
+    def flaky(round_id, model_name, forecasts):
+        calls.append(model_name)
+        if model_name == "Vendor/B":
+            raise m.UploadRejected("transient")
+        return _accepted()
+
+    monkeypatch.setattr(m, "upload_forecasts", flaky)
+    submitted = set()
+
+    assert m.process_challenge(OPEN_ROUND, MODELS, submitted=submitted) is False
+    assert submitted == {"Vendor/A"}
+
+    m.process_challenge(OPEN_ROUND, MODELS, submitted=submitted, retry=1)
+    assert calls == ["Vendor/A", "Vendor/B", "Vendor/B"]
+
+
+def test_retry_stops_once_registration_has_closed(uploader, monkeypatch):
+    """Bounded retry: a round nobody can upload to any more must not loop forever."""
+    monkeypatch.setattr(m, "upload_forecasts",
+                        lambda *a, **k: (_ for _ in ()).throw(m.UploadRejected("nope")))
+    assert m.process_challenge(OPEN_ROUND, MODELS) is False
+    assert m.process_challenge(CLOSED_ROUND, MODELS) is True
+
+
+def test_unprocessable_round_is_settled_not_retried(uploader):
+    """Nothing about a malformed round improves with waiting."""
+    assert m.process_challenge({"id": 1, "name": "r"}, MODELS) is True
+    assert m.process_challenge({"name": "no id"}, MODELS) is True
+    assert m.process_challenge(dict(OPEN_ROUND, frequency="every other tuesday"), MODELS) is True
+
+
+def test_context_data_that_never_arrives_stops_at_the_deadline(uploader, monkeypatch):
+    """The other unbounded path: waiting for context data is also capped by the window."""
+    monkeypatch.setattr(m, "get_context_data", lambda rid: [])
+    assert m.process_challenge(OPEN_ROUND, MODELS) is False
+    assert m.process_challenge(CLOSED_ROUND, MODELS) is True
+
+
+def test_a_round_with_no_deadline_is_treated_as_open():
+    assert m.registration_is_open({"id": 1}) is True
+    assert m.registration_is_open({"id": 1, "registration_end": "not a date"}) is True
