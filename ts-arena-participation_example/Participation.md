@@ -107,11 +107,18 @@ Each series is anchored on **its own** last context point, not on the round's st
 first forecast ts = (that series' last context ts) + frequency
 ```
 
-and then one point per `frequency` step, `horizon / frequency` points in total. Series lag
-behind one another, so a round-wide anchor produces timestamps that do not exist for the
-lagging ones. Take the anchor per series from the context data you fetched in step 3, and
-parse the timestamps before comparing them — a plain string `max()` over ISO timestamps
-picks the wrong one as soon as offsets or sub-second precision differ.
+and then one point per `frequency` step, `horizon / frequency` points in total.
+
+There is **no round-wide "the forecast starts here" instant**, and `start_time` on the round
+object is not one — it is informative only. The data providers we ingest from are not live:
+each publishes with a delay, the delay differs per provider and per series, and it is not
+known in advance. So when a round opens, different series have context reaching different
+distances toward the present, and a round-wide anchor produces timestamps that do not exist
+for the lagging ones.
+
+Take the anchor per series from the context data you fetched in step 3, and parse the
+timestamps before comparing them — a plain string `max()` over ISO timestamps picks the wrong
+one as soon as offsets or sub-second precision differ.
 
 ### Quantiles
 

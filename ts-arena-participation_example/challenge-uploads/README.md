@@ -157,9 +157,10 @@ Each series is anchored on **its own** last context point:
 first forecast ts = (that series' last context ts) + frequency
 ```
 
-not on the round's global start time. Series lag behind one another, so a round-wide anchor
-puts the lagging ones on timestamps that do not exist for them, and the platform rejects
-those series. This client therefore generates the timestamps itself and overwrites whatever
+not on the round's `start_time`, which is informative only and anchors nothing. The upstream
+providers are not live — each publishes with a delay that differs per provider and per series
+and is not known in advance — so series lag behind one another. A round-wide anchor puts the
+lagging ones on timestamps that do not exist for them, and the platform rejects those series. This client therefore generates the timestamps itself and overwrites whatever
 the model service returned — it does not rely on the context arriving in timestamp order.
 
 ### A 201 does not mean everything was stored
