@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -258,11 +259,21 @@ def test_a_fully_accepted_round_is_settled(uploader, monkeypatch):
     assert submitted == {"Vendor/A", "Vendor/B"}
 
 
-def test_failed_upload_leaves_the_round_open_for_retry(uploader, monkeypatch):
+def test_transient_upload_failure_leaves_the_round_open_for_retry(uploader, monkeypatch):
     """A failed upload used to settle the round too, burning it permanently."""
-    monkeypatch.setattr(m, "upload_forecasts",
-                        lambda *a, **k: (_ for _ in ()).throw(m.UploadRejected("nope")))
+    monkeypatch.setattr(m, "upload_forecasts", lambda *a, **k: (_ for _ in ()).throw(
+        requests.exceptions.ConnectionError("refused")))
     assert m.process_challenge(OPEN_ROUND, MODELS) is False
+
+
+def test_a_refused_upload_does_not_keep_the_round_open(uploader, monkeypatch):
+    """Content the platform refused is deterministic — the same payload is refused the
+    same way, so re-predicting it every poll until the window closes is pure waste."""
+    monkeypatch.setattr(m, "upload_forecasts",
+                        lambda *a, **k: (_ for _ in ()).throw(m.UploadRejected("unknown series")))
+    refused = set()
+    assert m.process_challenge(OPEN_ROUND, MODELS, refused=refused) is True
+    assert refused == {"Vendor/A", "Vendor/B"}
 
 
 def test_retry_does_not_resubmit_the_models_that_already_landed(uploader, monkeypatch):
@@ -272,7 +283,7 @@ def test_retry_does_not_resubmit_the_models_that_already_landed(uploader, monkey
     def flaky(round_id, model_name, forecasts):
         calls.append(model_name)
         if model_name == "Vendor/B":
-            raise m.UploadRejected("transient")
+            raise requests.exceptions.ConnectionError("transient")
         return _accepted()
 
     monkeypatch.setattr(m, "upload_forecasts", flaky)
@@ -287,8 +298,8 @@ def test_retry_does_not_resubmit_the_models_that_already_landed(uploader, monkey
 
 def test_retry_stops_once_registration_has_closed(uploader, monkeypatch):
     """Bounded retry: a round nobody can upload to any more must not loop forever."""
-    monkeypatch.setattr(m, "upload_forecasts",
-                        lambda *a, **k: (_ for _ in ()).throw(m.UploadRejected("nope")))
+    monkeypatch.setattr(m, "upload_forecasts", lambda *a, **k: (_ for _ in ()).throw(
+        requests.exceptions.ConnectionError("refused")))
     assert m.process_challenge(OPEN_ROUND, MODELS) is False
     assert m.process_challenge(CLOSED_ROUND, MODELS) is True
 

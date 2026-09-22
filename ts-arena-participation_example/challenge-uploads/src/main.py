@@ -540,7 +540,8 @@ def registration_is_open(challenge: Dict[str, Any]) -> bool:
 
 
 def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, str]],
-                      submitted: Optional[Set[str]] = None, retry: int = 0) -> bool:
+                      submitted: Optional[Set[str]] = None,
+                      refused: Optional[Set[str]] = None, retry: int = 0) -> bool:
     """Process a single challenge round.
 
     Returns **True when the round is settled** — every active model has either uploaded
@@ -557,6 +558,12 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
     is what keeps a partially successful round from double-submitting the models that
     already landed.
 
+    `refused` is the same idea for models the platform **rejected on content** — an unknown
+    series name, a wrong point count. Those are deterministic: the identical payload gets
+    refused identically, so re-predicting them every poll until the window closed would be
+    pure waste. They are dropped from the round instead. Only transient failures — a
+    connection error or 5xx, or a prediction that did not come back — keep the round open.
+
     `retry` is how many times this round has already come back not-ready. It is a logging
     knob only: the preamble and the "not ready" line are worth one INFO the first time and
     DEBUG on every repeat after that, so a 60 s poll does not flood the log.
@@ -565,6 +572,8 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
     challenge_name = challenge.get("name", "Unknown")
     if submitted is None:
         submitted = set()
+    if refused is None:
+        refused = set()
 
     # First look at this round gets the full preamble; the repeats go to DEBUG.
     detail = logger.info if retry == 0 else logger.debug
@@ -624,10 +633,12 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
 
     logger.info(f"  {len(histories)} series found")
 
-    # Process each model that has not already uploaded for this round.
-    pending = [(c, a) for c, a in active_models if a not in submitted]
-    if submitted:
-        logger.info(f"  Skipping {len(submitted)} model(s) already uploaded for this round")
+    # Process each model that has neither uploaded nor been refused for this round.
+    settled_models = submitted | refused
+    pending = [(c, a) for c, a in active_models if a not in settled_models]
+    if settled_models:
+        logger.info(f"  Skipping {len(submitted)} model(s) already uploaded and "
+                    f"{len(refused)} the platform refused for this round")
 
     for container_name, api_model_name in pending:
         logger.info(f"  Creating predictions with container {container_name} for model {api_model_name}")
@@ -657,13 +668,25 @@ def process_challenge(challenge: Dict[str, Any], active_models: List[Tuple[str, 
                 f"across {len(forecasts)} series"
             )
 
+        except UploadRejected as e:
+            # Content the platform refused. Deterministic — do not re-attempt this round.
+            refused.add(api_model_name)
+            logger.error(f"Upload refused for {container_name}, not retrying this round: {e}")
+            log_participation(str(round_id), challenge_name, container_name, api_model_name,
+                              "FAILURE", f"refused: {e}")
+
         except Exception as e:
             error_details = traceback.format_exc()
             logger.error(f"Error processing model {container_name}: {e}")
             log_participation(str(round_id), challenge_name, container_name, api_model_name, "FAILURE", f"{str(e)}\n{error_details}")
 
-    outstanding = [a for _, a in active_models if a not in submitted]
+    outstanding = [a for _, a in active_models if a not in submitted and a not in refused]
     if not outstanding:
+        if refused:
+            logger.error(
+                f"Round {round_id} settled with {len(refused)} model(s) refused "
+                f"({', '.join(sorted(refused))})"
+            )
         return True
 
     # Something did not land. Retry it while the round can still accept an upload —
@@ -733,14 +756,16 @@ def main_loop():
                     logger.debug(f"Round {round_id} already processed, skipping")
                     continue
                 
-                state = pending.setdefault(round_id, {"retry": 0, "submitted": set()})
+                state = pending.setdefault(
+                    round_id, {"retry": 0, "submitted": set(), "refused": set()})
                 retry = state["retry"]
 
                 # Process challenge
                 try:
                     settled = process_challenge(
                         challenge, active_models,
-                        submitted=state["submitted"], retry=retry,
+                        submitted=state["submitted"], refused=state["refused"],
+                        retry=retry,
                     )
                 except Exception as e:
                     # An unexpected error is not evidence the round is done. Leave it in
