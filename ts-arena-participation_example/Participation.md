@@ -19,6 +19,11 @@ You need a registered model before you can participate in any challenge. Send th
 
 > **Note on `model_size`:** number of parameters in millions, or `null` if the model is rule-based.
 
+> **Track:** models registered through the API compete in the Open Track. To get a published
+> method into the Reference Track, add it to [ts-arena-models](https://github.com/DAG-UPB/ts-arena-models)
+> by pull request. The [contribution guide](https://github.com/DAG-UPB/ts-arena-models/blob/main/CONTRIBUTING.md)
+> explains what qualifies.
+
 The response includes your model's numeric **`id`**. Keep it — it is what the readback
 endpoint in "Reviewing submissions" below takes. You can always look it up again with
 `GET /api/v1/models/`, which lists your own models.
