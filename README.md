@@ -90,8 +90,6 @@ Create/edit the `.env` file in the `ts-arena-participation_example/` directory:
 API_BASE_URL=http://your-api-portal-url
 API_UPLOAD_KEY=your-api-key-here
 
-USER_ID=your-user-id-here
-
 # This is the local service that routes predictions to your model containers
 MASTER_CONTROLLER_URL=http://master-controller-api:8000
 

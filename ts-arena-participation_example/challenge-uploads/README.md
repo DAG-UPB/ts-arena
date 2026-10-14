@@ -22,7 +22,6 @@ Create/edit your `.env` file in the project root:
 # API Portal connection (ts-arena-backend)
 API_BASE_URL=http://your-api-portal-url
 API_UPLOAD_KEY=your_api_key_here
-USER_ID=your_user_id_here
 
 # Master Controller (for model inference - set automatically via Docker Compose)
 MASTER_CONTROLLER_URL=http://master-controller-api:8000
@@ -64,7 +63,7 @@ python src/main.py         # Continuous mode
 
 The service performs the following steps:
 
-1. **Model Resolution**: Loads `config.json` and matches container names against models registered with the API (via `GET /api/v1/models?user_id=...`)
+1. **Model Resolution**: Loads `config.json` and matches container names against models registered with the API (via `GET /api/v1/models`, scoped to your API key)
 2. **Challenge Polling**: Regularly polls active challenge rounds via `GET /api/v1/challenge/rounds?status=registration`
 3. **Context Data**: Loads historical data via `GET /api/v1/challenge/rounds/{round_id}/context-data` with API key
 4. **Prediction**: Sends batch history data to the Master Controller (`POST http://master-controller-api:8000/predict`) for each configured model
@@ -85,7 +84,6 @@ The service performs the following steps:
 |----------|-------------|---------|
 | `API_BASE_URL` | URL of the ts-arena-backend API Portal | `http://localhost:8457` |
 | `API_UPLOAD_KEY` | Your API key (linked to your user) | **Required** |
-| `USER_ID` | Your user ID in the API (for fetching registered models) | **Required** |
 | `MASTER_CONTROLLER_URL` | URL of the Master Controller | `http://localhost:8456` |
 | `CHECK_INTERVAL` | Seconds between challenge checks | `60` |
 | `REQUEST_TIMEOUT` | HTTP request timeout in seconds | `600` |
