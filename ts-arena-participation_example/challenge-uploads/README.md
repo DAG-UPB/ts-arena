@@ -147,8 +147,8 @@ When uploading forecasts, use this payload format:
 - `ts`: ISO 8601 timestamp
 - `value`: Predicted value
 - `probabilistic_values`: Optional quantiles, canonical keys `q_0.1` … `q_0.9`. Send all nine: a
-  missing decile is interpolated from the ones you sent, which can only cost you. Non-canonical
-  keys are silently dropped.
+  missing decile is interpolated from the ones you sent, which can only cost you on average. Keys
+  other than the nine deciles (`q_0.1` … `q_0.9`, or bare `0.1` … `0.9`) are silently dropped.
 
 There is no `user_id` field — your identity comes from the `X-API-Key` header.
 
