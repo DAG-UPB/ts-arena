@@ -130,9 +130,11 @@ When uploading forecasts, use this payload format:
       "challenge_series_name": "Energy_Series_1",
       "forecasts": [
         {"ts": "2026-02-02T10:15:00Z", "value": 150.5,
-         "probabilistic_values": {"q_0.1": 141.0, "q_0.5": 150.5, "q_0.9": 160.2}},
+         "probabilistic_values": {"q_0.1": 141.0, "q_0.2": 144.3, "q_0.3": 146.6, "q_0.4": 148.6, "q_0.5": 150.5,
+                                  "q_0.6": 152.4, "q_0.7": 154.5, "q_0.8": 156.9, "q_0.9": 160.2}},
         {"ts": "2026-02-02T10:30:00Z", "value": 152.3,
-         "probabilistic_values": {"q_0.1": 142.1, "q_0.5": 152.3, "q_0.9": 162.7}}
+         "probabilistic_values": {"q_0.1": 142.1, "q_0.2": 145.6, "q_0.3": 148.1, "q_0.4": 150.3, "q_0.5": 152.3,
+                                  "q_0.6": 154.4, "q_0.7": 156.6, "q_0.8": 159.1, "q_0.9": 162.7}}
       ]
     }
   ]
@@ -144,8 +146,9 @@ When uploading forecasts, use this payload format:
 - `challenge_series_name`: From the context data response
 - `ts`: ISO 8601 timestamp
 - `value`: Predicted value
-- `probabilistic_values`: Optional quantiles, canonical keys `q_0.1` … `q_0.9` (all nine in a
-  real submission; abbreviated here). Non-canonical keys are silently dropped.
+- `probabilistic_values`: Optional quantiles, canonical keys `q_0.1` … `q_0.9`. Send all nine: a
+  missing decile is interpolated from the ones you sent, which can only cost you. Non-canonical
+  keys are silently dropped.
 
 There is no `user_id` field — your identity comes from the `X-API-Key` header.
 

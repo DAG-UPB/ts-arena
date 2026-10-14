@@ -19,6 +19,9 @@ You need a registered model before you can participate in any challenge. Send th
 
 > **Note on `model_size`:** number of parameters in millions, or `null` if the model is rule-based.
 
+> **Send all nine deciles:** probabilistic forecasts are scored on the deciles 0.1 … 0.9. A decile
+> you leave out is interpolated from the ones you sent, which can only cost you. See "Quantiles" in step 5.
+
 > **Track:** models registered through the API compete in the Open Track. To get a published
 > method into the Reference Track, add it to [ts-arena-models](https://github.com/DAG-UPB/ts-arena-models)
 > by pull request. The [contribution guide](https://github.com/DAG-UPB/ts-arena-models/blob/main/CONTRIBUTING.md)
@@ -155,6 +158,12 @@ one as soon as offsets or sub-second precision differ.
 Bare `"0.1"` … `"0.9"` are accepted too and canonicalised on arrival. **Anything else is
 silently dropped from that point** — `"0.10"`, `"p10"`, `"q10"`, `"median"` all fail this
 way. Quantiles that cross are sorted ascending on arrival and reported back as a warning.
+
+Send **all nine deciles** at every timestamp. The scaled quantile loss (SQL) is taken over all
+nine: a decile you leave out is interpolated linearly between its neighbouring deciles (beyond the
+outermost ones, along the line through the two outermost), which can only cost you. A timestamp
+with fewer than two deciles is scored with your point forecast for the missing ones, and a forecast
+without a single timestamp carrying two deciles counts as point-only.
 
 Probabilistic submissions are scored separately with the scaled quantile loss (SQL) and have
 their own leaderboard. A point-only forecast is ranked on MASE alone.
